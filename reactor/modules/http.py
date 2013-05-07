@@ -4,37 +4,38 @@ import BaseHTTPServer
 import cgi
 import json
 import logging
+import sys
 import thread
 import urlparse
-
 
 import pykka
 
 
 class HttpModule(pykka.ThreadingActor):
-    def __init__(self, config=None):
+    def __init__(self, router=None, config=None):
         super(HttpModule, self).__init__()
+        classname = self.__class__.__name__.lower()
+
+        self.logger = logging.getLogger('%s.%s' % (__name__, classname))
+
+        if router is None:
+            self.logger.error('No router specified.  Abort')
+            raise RuntimeError('No router specified')
 
         if config is None:
             config = {}
 
-        if 'port' in config:
-            port = int(config['port'])
-        else:
-            port = 8080
-        
-        classname = self.__class__.__name__.lower()
-
-        self.logger = logging.getLogger('%s.%s' % (__name__, classname))
+        port = int(config.get('port', 8080))
         
         self.http_server = BaseHTTPServer.HTTPServer(
             ('', port), 
-            lambda *args, **kwargs: HttpHandler(config=config, *args, **kwargs))
+            lambda *args, **kwargs: HttpHandler(router=router,
+                                           config=config, 
+                                           *args, **kwargs))
 
         self.logger.debug('Started web server on port %d' % port)
         self.must_quit = False
         self.tid = thread.start_new_thread(self.do_thread, ())
-
 
     def do_thread(self):
         while not self.must_quit:
@@ -45,26 +46,18 @@ class HttpModule(pykka.ThreadingActor):
 
 class HttpHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        if 'config' in kwargs:
-            config = kwargs.pop('config')
-        else:
-            config = {}
-
         classname = self.__class__.__name__.lower()
         self.logger = logging.getLogger('%s.%s' % (__name__, classname))
 
-        self.logger.error('args: %s' % (args,))
-        self.logger.error('kwargs: %s' % (kwargs,))
+        config = {}
+        if 'config' in kwargs:
+            config = kwargs.pop('config')
 
-        if config is None:
-            config = {}
-
-        if 'source_name' in config:
-            self.source_name = config['source_name']
-        else:
-            self.source_name = 'http'
+        assert('router' in kwargs)
+        self.router = kwargs.pop('router')
 
         self.config = config
+
         BaseHTTPServer.BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
 
     def log_message(self, format, *args):
@@ -90,11 +83,15 @@ class HttpHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             else:
                 self.warn('HTTP 0.9?  Really?')
         
-        message = {'source_type': 'http',
-                   'source_name': self.source_name,
+        message = {'source': self.config['name'],
+                   'source_type': 'http',
                    'source_opts': message_opts,
                    'message': message_data}
 
-        if 'router' in self.config:
-            self.config['router'].tell(message)
+        
+        if self.router is not None:
+            self.router.tell(message)
+        else:
+            self.logger.debug("No router... dropping message")
 
+        
