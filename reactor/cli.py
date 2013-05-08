@@ -28,15 +28,16 @@ def load_all_modules(router_module, module_dict):
             sys.exit(1)
 
     logging.debug('Loading router module')
-    router_ref = load_module(router_opts['class'], 
+    router_ref = load_module(router_opts['class'],
                              **router_opts.get('config', {}))
+    router_proxy = router_ref.proxy()
 
     for k, v in module_dict.iteritems():
         if k == router_module:  # don't load again...
             continue
 
         logging.debug('Loading module %s' % k)
-        
+
         if not 'class' in v:
             logging.error('Missing "class" in section %s' % k)
             sys.exit(1)
@@ -51,6 +52,18 @@ def load_all_modules(router_module, module_dict):
             sys.exit(1)
 
         # check interests and register with router
+        if 'interests' in v:
+            for interest_str in v['interests']:
+                success, msg = router_proxy.register_interest(
+                    module_refs[k], interest_str).get()
+
+                if success is False:
+                    logging.error(
+                        'Error registering interest "%s" for %s: %s' %
+                        (interest_str, k, msg))
+                    quit_app()
+                    sys.exit(1)
+
 
 def load_module(class_name, **kwargs):
     try:
@@ -107,7 +120,7 @@ def app():
         sys.exit(1)
 
     load_all_modules(config.get('router_module', None), config['modules'])
-    
+
     while(1):
         time.sleep(5)
         logging.getLogger().debug('Tick')

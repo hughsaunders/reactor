@@ -26,11 +26,11 @@ class HttpModule(pykka.ThreadingActor):
             config = {}
 
         port = int(config.get('port', 8080))
-        
+
         self.http_server = BaseHTTPServer.HTTPServer(
-            ('', port), 
+            ('', port),
             lambda *args, **kwargs: HttpHandler(router=router,
-                                           config=config, 
+                                           config=config,
                                            *args, **kwargs))
 
         self.logger.debug('Started web server on port %d' % port)
@@ -82,16 +82,14 @@ class HttpHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 message_data = json.loads(self.rfile.read(length))
             else:
                 self.warn('HTTP 0.9?  Really?')
-        
+
         message = {'source': self.config['name'],
                    'source_type': 'http',
                    'source_opts': message_opts,
                    'message': message_data}
 
-        
+
         if self.router is not None:
             self.router.tell(message)
         else:
             self.logger.debug("No router... dropping message")
-
-        
