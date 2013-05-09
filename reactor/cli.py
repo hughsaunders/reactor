@@ -6,6 +6,7 @@ import logging
 import signal
 import sys
 import time
+import traceback
 import yaml
 
 import pykka
@@ -48,6 +49,7 @@ def load_all_modules(router_module, module_dict):
                 config=dict(name=k, **(v.get('config', {}))))
         except Exception as e:
             logging.error('Exception loading module %s: %s' % (k, str(e)))
+            traceback.print_exc()
             quit_app()
             sys.exit(1)
 
