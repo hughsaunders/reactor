@@ -8,6 +8,7 @@ import sys
 import thread
 
 import pykka
+import reactor.util
 
 
 # This module will receive messages, as well as push interests
@@ -124,7 +125,9 @@ class SockModule(pykka.ThreadingActor):
                     message_text = ''.join(message)
                     message_dict = json.loads(message_text)
 
-                    self.router.tell(message_dict)
+                    self.router.tell(reactor.util.message_wrap(message_dict,
+                                                               self.config['name'],
+                                                               'socket'))
                     break
 
                 if message_len > 64 * 1024:

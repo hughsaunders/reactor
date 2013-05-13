@@ -28,6 +28,18 @@ class RouterModule(pykka.ThreadingActor):
     def on_receive(self, message):
         self.logger.debug("Got message: %s" % (message,))
 
+        assert('headers' in message)
+        assert(len(message['headers']) > 0)
+        assert('ttl' in message['headers'][-1])
+
+        # it should be properly wrapped, so check ttl.
+        # some defaults here?
+        last_ttl = message['headers'][-1]['ttl']
+
+        if last_ttl < 1:
+            self.logger.warning('TTL Drop: message loop')
+            return
+
         # walk through our registered interests and see if anyone
         # wants it.
         for actor, ast in self.interests:

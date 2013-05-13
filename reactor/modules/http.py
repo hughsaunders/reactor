@@ -9,6 +9,7 @@ import thread
 import urlparse
 
 import pykka
+import reactor.util
 
 
 class HttpModule(pykka.ThreadingActor):
@@ -83,11 +84,9 @@ class HttpHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             else:
                 self.warn('HTTP 0.9?  Really?')
 
-        message = {'source': self.config['name'],
-                   'source_type': 'http',
-                   'source_opts': message_opts,
-                   'message': message_data}
 
+        message = reactor.util.message_wrap(message_data, self.config['name'],
+                                            'http', source_opts = message_opts)
 
         if self.router is not None:
             self.router.tell(message)

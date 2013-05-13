@@ -14,5 +14,5 @@ class StderrModule(pykka.ThreadingActor):
         self.logger = logging.getLogger('%s.%s' % (__name__, classname))
 
     def on_receive(self, message):
-        self.logger.debug("Got message: %s" % (message,))
-        print >>sys.stderr, message
+        self.logger.debug("Got message: %s" % (message['message'],))
+        print >>sys.stderr, message['message']
