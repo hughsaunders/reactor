@@ -93,53 +93,76 @@ class SockModule(pykka.ThreadingActor):
             self.logger.debug('New connection on sock listener')
             ct = thread.start_new_thread(self.do_client, (cl, ))
 
+    def get_block(self, fileish):
+        message = []
+        message_len = 0
+        message_too_long = False
+
+        while True:
+            line = fileish.readline()
+
+            if len(line) == 0:
+                self.logger.debug('Client disconnected')
+                return None
+
+            line = line.rstrip('\n\r')
+            self.logger.debug('Got line: %s' % line)
+
+            if line != '.':
+                if message_len > 64 * 1024:
+                    if message_too_long is False:
+                        self.logger.warning('Data too long... absorbing')
+                        message_too_long = True
+                else:
+                    message_len += len(line)
+                    message.append(line)
+            else:
+                self.logger.debug('Finished receiving data block')
+                if message_too_long:  # going to be broken, we'll skip it.
+                    return None
+
+                message_text = ''.join(message)
+                try:
+                    message_dict = json.loads(message_text)
+                except ValueError:
+                    return None
+
+                return message_dict
+
     def do_client(self, client_socket):
         # we'll do nothing but reads in this thread, and
         # if the client registers interests, we'll spin up
-        # an full-on actor for it.
+        # an full-on actor for sonds to it.
         socketfile = client_socket.makefile()
 
         while True:
-            message = []
-            message_len = 0
+            line = socketfile.readline()
 
-            # we'll make this kind of line-oriented... read line
-            # by line until we get to a line with a "." all by
-            # itself.  Kind of lame, but more netcattable than
-            # length + data or something.
-            while True:
-                line = socketfile.readline()
+            if len(line) == 0:
+                self.logger.debug('Client disconnected')
+                return
 
-                if len(line) == 0:
-                    self.logger.debug('Client disconnected')
-                    return
+            line = line.rstrip('\n\r')
+            self.logger.debug('Got Line: %s' % line)
 
-                line = line.rstrip('\n\r')
-                self.logger.debug('Got line: %s' % line)
+            if line.lower() == 'message':
+                message_dict = self.get_block(socketfile)
+                self.router.tell(reactor.util.message_wrap(message_dict,
+                                                           self.config['name'],
+                                                           'socket'))
+                continue
+            elif line.lower() == 'interest':
+                pass
+            elif line.lower() == 'quit':
+                break
 
-                if line != '.':
-                    message_len += len(line)
-                    message.append(line)
-                else:
-                    self.logger.debug('Pushing message to router')
-                    message_text = ''.join(message)
-                    message_dict = json.loads(message_text)
-
-                    self.router.tell(reactor.util.message_wrap(message_dict,
-                                                               self.config['name'],
-                                                               'socket'))
-                    break
-
-                if message_len > 64 * 1024:
-                    self.logging.error("Message size exceeded")
-                    break
-
+        self.logger.debug('Client listener exiting')
         close(cl)
 
     def on_receive(self, message):
         self.logger.debug("Got message: %s" % (message,))
 
         if self.mode == self.OUTBOUND:
-            message_text = json.dumps(message) + "\n.\n"
+            message_text = 'MESSAGE\n' + json.dumps(message) + "\n.\n"
 
             self.outbound_socket.send(message_text)
