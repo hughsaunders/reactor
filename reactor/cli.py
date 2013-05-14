@@ -30,7 +30,8 @@ def load_all_modules(router_module, module_dict):
 
     logging.debug('Loading router module')
     router_ref = load_module(router_opts['class'],
-                             **router_opts.get('config', {}))
+                             router=None,
+                             config=router_opts.get('config', {}))
     router_proxy = router_ref.proxy()
 
     for k, v in module_dict.iteritems():
@@ -57,7 +58,7 @@ def load_all_modules(router_module, module_dict):
         if 'interests' in v:
             for interest_str in v['interests']:
                 success, msg = router_proxy.register_interest(
-                    module_refs[k], interest_str).get()
+                    k, module_refs[k], interest_str).get()
 
                 if success is False:
                     logging.error(

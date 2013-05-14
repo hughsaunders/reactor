@@ -16,14 +16,18 @@ import pykka
 # }
 #
 class RouterModule(pykka.ThreadingActor):
-    def __init__(self, *args, **kwargs):
-        super(RouterModule, self).__init__(*args, **kwargs)
+    def __init__(self, router=None, config=None):
+        super(RouterModule, self).__init__()
+
+        self.config = config
+        if config is None:
+            self.config = {}
 
         classname = self.__class__.__name__.lower()
         self.logger = logging.getLogger('%s.%s' % (__name__, classname))
 
-        self.interests = []
-
+        self.interests = {}
+        self.name_to_ref = {}
 
     def on_receive(self, message):
         self.logger.debug("Got message: %s" % (message,))
@@ -42,12 +46,29 @@ class RouterModule(pykka.ThreadingActor):
 
         # walk through our registered interests and see if anyone
         # wants it.
-        for actor, ast in self.interests:
-            if ast.eval_node(message) is True:
-                actor.tell(message)
+        for ref, asts in self.interests.iteritems():
+            sent_message = False
+
+            if self.config.get('hairpin', False) is False:
+                # we want to not consider same ref
+                inmod = message['headers'][-1]['source']
+                if ref == self.name_to_ref.get(inmod, None):
+                    continue
+
+                if ref == self.name_to_ref.get('%s-reverse' % inmod,
+                                               None):
+                    continue
 
 
-    def register_interest(self, actor, interest_str):
+            for ast in asts:
+                if ast.eval_node(message) is True:
+                    # we don't want to send the same message twice to
+                    # the same plugin.
+                    if sent_message is False:
+                        ref.tell(message)
+                        sent_message = True
+
+    def register_interest(self, name, actor, interest_str):
         try:
             builder = reactor.ast.FilterBuilder(
                 reactor.ast.FilterTokenizer(), interest_str)
@@ -55,5 +76,12 @@ class RouterModule(pykka.ThreadingActor):
         except ValueError as e:
             return False, str(e)
 
-        self.interests.append((actor, ast))
+        if not actor in self.interests:
+            self.interests[actor] = []
+
+        self.interests[actor].append(ast)
+
+        # in case we want to source route by name
+        self.name_to_ref[name] = actor
+
         return True, 'Success'
