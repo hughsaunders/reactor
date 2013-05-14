@@ -76,14 +76,25 @@ class HttpHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         # we ought to have some data here...
         ctype, pdict = cgi.parse_header(self.headers.getheader('content-type'))
+        length = int(self.headers.getheader('content-length', None))
+
+        if length is None:
+            self.logging.warning('No content length. Ignoring.')
+            return
+
+        message_txt = self.rfile.read(length)
+        self.logger.debug('message: %s' % (message_txt, ))
+
         if ctype == 'application/json' or \
            ctype == 'text/json':
-            length = int(self.headers.getheader('content-length', None))
-            if length is not None:
-                message_data = json.loads(self.rfile.read(length))
-            else:
-                self.warn('HTTP 0.9?  Really?')
-
+            message_data = json.loads(message_txt)
+        elif ctype == 'application/x-www-form-urlencoded':
+            # This is completely broken, and only works on
+            # github.  Should be abstracted
+            message_data = json.loads(urlparse.parse_qs(message_txt)['payload'][0])
+        else:
+            self.logger.debug('content type: %s. Ignoring' % (ctype,))
+            return
 
         message = reactor.util.message_wrap(message_data, self.config['name'],
                                             'http', source_opts = message_opts)
