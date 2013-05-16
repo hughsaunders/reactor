@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import argparse
-import copy
 import logging
 import signal
 import sys
@@ -46,7 +45,7 @@ def load_all_modules(router_module, module_dict):
 
         try:
             module_refs[k] = load_module(
-                v['class'],router=router_ref,
+                v['class'], router=router_ref,
                 config=dict(name=k, **(v.get('config', {}))))
         except Exception as e:
             logging.error('Exception loading module %s: %s' % (k, str(e)))
@@ -107,7 +106,7 @@ def app():
 
     try:
         stream = open(args.config, 'r')
-    except IOError as e:
+    except IOError:
         print >>sys.stdout, 'Error: cannot open config file %s' % args.config
         sys.exit(1)
 

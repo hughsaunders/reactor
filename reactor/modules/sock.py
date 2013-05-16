@@ -2,15 +2,12 @@
 
 import json
 import logging
-import os
 import socket
-import sys
 import thread
 
 import pykka
 import reactor.util
 import reactor.modules.router
-
 
 
 class SockReverseModule(pykka.ThreadingActor):
@@ -96,12 +93,13 @@ class SockModule(pykka.ThreadingActor):
 
             # make the socket connection
             self.outbound_socket = socket.socket(socket.AF_INET,
-                                                  socket.SOCK_STREAM)
+                                                 socket.SOCK_STREAM)
             self.outbound_socket.connect((host, int(port)))
 
             if 'interests' in self.config:
                 # dump out our interests on the line
-                message_text = 'INTEREST\n' + json.dumps(self.config['interests']) + "\n.\n"
+                message_text = 'INTEREST\n' + json.dumps(
+                    self.config['interests']) + "\n.\n"
                 self.outbound_socket.send(message_text)
 
                 # we need to spin up a thread for reading stuff that
@@ -128,7 +126,7 @@ class SockModule(pykka.ThreadingActor):
         while True:
             (cl, addr) = self.accept_socket.accept()
             self.logger.debug('New connection on sock listener')
-            ct = thread.start_new_thread(self.do_client, (cl, ))
+            thread.start_new_thread(self.do_client, (cl, ))
 
     def get_block(self, fileish):
         message = []
@@ -214,14 +212,14 @@ class SockModule(pykka.ThreadingActor):
                                     '%s-reverse' % self.config['name'],
                                     interest_agent, interest)
                         else:
-                            self.logger.debug('skipping INTEREST on OUTBOUND sock')
+                            self.logger.debug('skipping outbound interest')
 
             elif line.lower() == 'quit':
                 self.logger.debug('Exiting listener at client request')
                 break
 
         self.logger.debug('Client listener exiting')
-        close(cl)
+        client_socket.close()
 
     def on_receive(self, message):
         self.logger.debug("Got message: %s" % (message,))

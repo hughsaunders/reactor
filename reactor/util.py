@@ -55,6 +55,7 @@ def message_wrap(message, name, source_type,
     message['headers'].append(header)
     return message
 
+
 def message_strip(message):
     if not 'message' in message:
         raise ParameterError('not a wrapped message')

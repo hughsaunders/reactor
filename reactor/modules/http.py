@@ -4,7 +4,6 @@ import BaseHTTPServer
 import cgi
 import json
 import logging
-import sys
 import thread
 import urlparse
 
@@ -30,9 +29,10 @@ class HttpModule(pykka.ThreadingActor):
 
         self.http_server = BaseHTTPServer.HTTPServer(
             ('', port),
-            lambda *args, **kwargs: HttpHandler(router=router,
-                                           config=config,
-                                           *args, **kwargs))
+            lambda *args, **kwargs: HttpHandler(
+                router=router,
+                config=config,
+                *args, **kwargs))
 
         self.logger.debug('Started web server on port %d' % port)
         self.must_quit = False
@@ -85,19 +85,19 @@ class HttpHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         message_txt = self.rfile.read(length)
         self.logger.debug('message: %s' % (message_txt, ))
 
-        if ctype == 'application/json' or \
-           ctype == 'text/json':
+        if ctype == 'application/json' or ctype == 'text/json':
             message_data = json.loads(message_txt)
         elif ctype == 'application/x-www-form-urlencoded':
             # This is completely broken, and only works on
             # github.  Should be abstracted
-            message_data = json.loads(urlparse.parse_qs(message_txt)['payload'][0])
+            message_data = json.loads(urlparse.parse_qs(
+                message_txt)['payload'][0])
         else:
             self.logger.debug('content type: %s. Ignoring' % (ctype,))
             return
 
         message = reactor.util.message_wrap(message_data, self.config['name'],
-                                            'http', source_opts = message_opts)
+                                            'http', source_opts=message_opts)
 
         if self.router is not None:
             self.router.tell(message)

@@ -59,7 +59,6 @@ class RouterModule(pykka.ThreadingActor):
                                                None):
                     continue
 
-
             for ast in asts:
                 if ast.eval_node(message) is True:
                     # we don't want to send the same message twice to
