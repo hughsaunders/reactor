@@ -25,9 +25,10 @@ class AstTests(unittest2.TestCase):
     def tearDown(self):
         pass
 
-    def _eval(self, node, expression):
+    def _eval(self, node, expression, ns=None):
         ast = reactor.ast.FilterBuilder(reactor.ast.FilterTokenizer(),
-                                        expression).build()
+                                        input_expression = expression,
+                                        ns=ns)
         return ast.eval_node(node)
 
     def test_int_equality(self):
@@ -107,3 +108,7 @@ class AstTests(unittest2.TestCase):
     def test_static_array(self):
         self.assertTrue(self._eval(self.node1,
                                    'arrayfield = [ 1, 2, 3 ]'))
+
+    def test_ns(self):
+        ns = {'foo': 'bar'}
+        self.assertEqual(self._eval(self.node1, 'foo', ns), 'bar')
