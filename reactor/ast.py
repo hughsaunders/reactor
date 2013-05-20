@@ -34,14 +34,14 @@ def util_nth(n, ary):
 
 
 def util_str(what):
-    if not what:
+    if what is None:
         return None
 
     return str(what)
 
 
 def util_int(what):
-    if not what:
+    if what is None:
         return None
 
     return int(what)
@@ -119,7 +119,8 @@ default_functions = {'nth': util_nth,
                      'max': util_max,
                      'min': util_min,
                      'count': util_count,
-                     'union': util_union}
+                     'union': util_union,
+                     'remove': util_remove}
 
 
 class AbstractTokenizer(object):
@@ -186,12 +187,20 @@ class FilterTokenizer(AbstractTokenizer):
             (r"[a-zA-Z_]*:", self.typedef),
             (r"\<\=|\>\=", self.op),
             (r"\=|\<|\>", self.op),
-            (r"[A-Za-z{][A-Za-z0-9_\.\-{}]*", self.identifier),
+            (r"[A-Za-z{][A-Za-z0-9_\-{}]*", self.identifier),
+            (r"\[", self.open_bracket),
+            (r"\]", self.close_bracket)
         ])
 
     # token generators
     def typedef(self, scanner, token):
         return 'TYPEDEF', token[0:-1]
+
+    def open_bracket(self, scanner, token):
+        return 'OPENBRACKET', token
+
+    def close_bracket(self, scanner, token):
+        return 'CLOSEBRACKET', token
 
     def op(self, scanner, token):
         return 'OP', token
@@ -238,6 +247,18 @@ class FilterTokenizer(AbstractTokenizer):
         return 'NONE', token
 
 
+def logwrapper(func):
+    def f(self, *args, **kwargs):
+        fname = func.__name__
+
+        self.logger.debug('Entering %s: %s' % (fname, self.tokenizer.peek()))
+        retval = func(self, *args, **kwargs)
+        self.logger.debug('Exiting %s' % (fname, ))
+        return retval
+
+    return f
+
+
 class AstBuilder(object):
     def __init__(self, tokenizer, input_expression=None, functions={}, ns={}):
         self.tokenizer = tokenizer
@@ -279,7 +300,7 @@ class AstBuilder(object):
 #
 # field -> datatype.value
 # op -> '=', '<', '>'
-# value -> number | string
+# value -> number | string | openbracket e_i [, e_i...] closebracket
 #
 # Lots of small problems here.. nodes should probably
 # store both tokens and
@@ -308,6 +329,7 @@ class FilterBuilder(AstBuilder):
                             symbol_table=symbol_table)
 
     # criterion -> evaluable_item { uneg } op evaluable_item
+    @logwrapper
     def parse_criterion(self):
         negate = False
 
@@ -331,8 +353,42 @@ class FilterBuilder(AstBuilder):
         else:
             return lhs
 
-    # evaulable_item -> function(evalable_item, ...) | identifier | value
+    @logwrapper
+    def parse_array(self):
+        array_value = []
+
+        token, val = self.tokenizer.scan()
+        assert(token == 'OPENBRACKET')
+
+        while(True):
+            token_next, val_next = self.tokenizer.peek()
+
+            if token_next == 'CLOSEBRACKET':
+                self.tokenizer.scan()
+                return Node(array_value, 'ARRAY', None)
+
+            new_node = self.parse_expr()
+
+            self.logger.debug('Appending value of type %s' % (new_node.op,))
+            array_value.append(new_node)
+
+            next_token, next_val = self.tokenizer.peek()
+            if next_token == 'COMMA':
+                self.tokenizer.scan()  # eat the comma
+                continue
+
+            if next_token != 'CLOSEBRACKET':
+                raise SyntaxError('Expecting "]" or ","')
+
+    # evaulable_item -> function(evalable_item, ...) | identifier |
+    # value
+    @logwrapper
     def parse_evaluable_item(self):
+        next_token, next_val = self.tokenizer.peek()
+        if next_token == 'OPENBRACKET':
+            self.logger.debug("Found openbracket -- parsing evaluable item as array")
+            return self.parse_array()
+
         token, val = self.tokenizer.scan()
 
         if token == 'NUMBER':
@@ -374,6 +430,7 @@ class FilterBuilder(AstBuilder):
                           self.input_expression)
 
     # expr -> T_OPENPAREN andexpr T_CLOSEPAREN | criterion
+    @logwrapper
     def parse_expr(self):
         token, val = self.tokenizer.peek()
 
@@ -388,6 +445,7 @@ class FilterBuilder(AstBuilder):
             return self.parse_criterion()
 
     # orexpr -> expr { T_OR expr }
+    @logwrapper
     def parse_orexpr(self):
         node = self.parse_expr()
 
@@ -400,6 +458,7 @@ class FilterBuilder(AstBuilder):
             return node
 
     # andexpr -> orexpr { T_AND orexpr }
+    @logwrapper
     def parse_andexpr(self):
         node = self.parse_orexpr()
 
@@ -412,6 +471,7 @@ class FilterBuilder(AstBuilder):
             return node
 
     # phrase -> {typedef}? andexpr EOF
+    @logwrapper
     def parse_phrase(self):
         token, val = self.tokenizer.peek()
 
@@ -596,7 +656,7 @@ class Node:
                           (str(self), symbol_table))
 
         if self.op in ['STRING', 'NUMBER', 'BOOL',
-                       'IDENTIFIER', 'FUNCTION', 'NONE']:
+                       'IDENTIFIER', 'FUNCTION', 'ARRAY', 'NONE']:
             if self.op == 'STRING':
                 # check for string interpolation in identifier.
                 retval = str(self.lhs)
@@ -622,6 +682,12 @@ class Node:
 
             if self.op == 'NONE':
                 retval = None
+
+            if self.op == 'ARRAY':
+                retval = []
+                for item in self.lhs:
+                    retval.append(item.eval_node(node, symbol_table=symbol_table))
+                return retval
 
             if self.op == 'FUNCTION':
                 if not self.lhs in functions:
