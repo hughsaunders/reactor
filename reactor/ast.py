@@ -169,6 +169,10 @@ class FilterTokenizer(AbstractTokenizer):
         super(FilterTokenizer, self).__init__()
 
         self.scanner = re.Scanner([
+            (r"\+", self.arith),
+            (r"-", self.arith),
+            (r"/", self.arith),
+            (r"\*", self.arith),
             (r"!", self.negation),
             (r":=", self.op),
             (r"or", self.or_op),
@@ -188,10 +192,17 @@ class FilterTokenizer(AbstractTokenizer):
             (r"\=|\<|\>", self.op),
             (r"[A-Za-z{][A-Za-z0-9_\-{}]*", self.identifier),
             (r"\[", self.open_bracket),
-            (r"\]", self.close_bracket)
+            (r"\]", self.close_bracket),
+            (r"\.", self.deref)
         ])
 
     # token generators
+    def arith(self, scanner, token):
+        return 'ARITH', token
+
+    def deref(self, scanner, token):
+        return 'DEREF', token
+
     def open_bracket(self, scanner, token):
         return 'OPENBRACKET', token
 
@@ -304,8 +315,7 @@ class AstBuilder(object):
 # op -> '=', '<', '>'
 # value -> number | string | openbracket e_i [, e_i...] closebracket
 #
-# Lots of small problems here.. nodes should probably
-# store both tokens and
+
 class FilterBuilder(AstBuilder):
     def __init__(self, tokenizer, input_expression=None,
                  functions=None, ns=None):
@@ -315,6 +325,10 @@ class FilterBuilder(AstBuilder):
 
     def parse(self):
         return self.parse_phrase()
+
+    def emit(self):
+        root_node = self.build()
+        return root_node.emit()
 
     def eval_node(self, node, functions=None, ns=None):
         root_node = self.build()
@@ -379,7 +393,7 @@ class FilterBuilder(AstBuilder):
             if next_token != 'CLOSEBRACKET':
                 raise SyntaxError('Expecting "]" or ","')
 
-    # evaulable_item -> function(evalable_item, ...) | identifier |
+    # evalable_item -> function(evalable_item, ...) | identifier |
     # value
     @logwrapper
     def parse_evaluable_item(self):
@@ -449,10 +463,10 @@ class FilterBuilder(AstBuilder):
         node = self.parse_expr()
 
         token, val = self.tokenizer.peek()
-        if token == 'OR':
+        if token == 'OR' or (token == 'ARITH' and val in ['*', '/']):
             self.tokenizer.scan()  # eat the token
-            rhs = self.parse_andexpr()
-            return Node(node, 'OR', rhs)
+            rhs = self.parse_orexpr()
+            return Node(node, val.upper(), rhs)
         else:
             return node
 
@@ -462,10 +476,10 @@ class FilterBuilder(AstBuilder):
         node = self.parse_orexpr()
 
         token, val = self.tokenizer.peek()
-        if token == 'AND':
+        if token == 'AND' or (token == 'ARITH' and val in ['+', '-']):
             self.tokenizer.scan()  # eat the token
             rhs = self.parse_andexpr()
-            return Node(node, 'AND', rhs)
+            return Node(node, val.upper(), rhs)
         else:
             return node
 
@@ -491,6 +505,34 @@ class Node:
         self.negate = negate
         classname = self.__class__.__name__.lower()
         self.logger = logging.getLogger('%s.%s' % (__name__, classname))
+
+    def arithop(self, op, val1, val2):
+        if op == '+':
+            return val1 + val2
+        if op == '-':
+            return val1 - val2
+        if op == '*':
+            return val1 * val2
+        if op == '/':
+            return val1 / val2
+
+        raise SyntaxError('Bad arith op: %s' % op)
+
+    def emit(self, indent=0):
+        outstr = " " * indent
+        outstr += self.op + ': '
+
+        if self.op in ['NUMBER', 'BOOL', 'NONE',
+                       'STRING', 'IDENTIFIER']:
+            outstr += self.value_to_s()
+        elif self.op in ['+', '-', '*', '/']:
+            outstr += '\n' + self.lhs.emit(indent+1) + self.rhs.emit(indent+1)
+        elif self.op in ['AND', 'OR']:
+            outstr += '\n' + self.lhs.emit(indent+1) + self.rhs.emit(indent+1)
+        else:
+            raise SyntaxError('Non emittable op: %s' % (self.op,))
+
+        return outstr + '\n'
 
     def concrete(self, ns):
         if self.op in ['NUMBER', 'BOOL', 'NONE']:
@@ -579,6 +621,61 @@ class Node:
             return self.canonicalize_identifier(node, new_identifier, ns)
 
         return identifier
+
+
+    # def assign_identifier(self, node, identifier, value, ns=None):
+    #     # there is lots of strange flakeyness here.
+
+    #     self.logger.debug('assigning id using api: %s' % self.api)
+
+    #     if not identifier:
+    #         return None
+
+    #     self.logger.debug('setting %s to %s' % (identifier, value))
+    #     canonical = self.canonicalize_identifier(node, identifier,
+    #                                              symbol_table)
+
+    #     self.logger.debug('canonicalized %s to %s' % (identifier, canonical))
+    #     if canonical.find('.') == -1:
+    #         # do an update on this node.
+    #         self.api._model_update_by_id(object_type, node['id'],
+    #                                      {canonical: value})
+    #         return
+    #     else:
+    #         (attr, rest) = canonical.split('.', 1)
+
+    #         self.logger.debug('attr: %s, object_type: %s' %
+    #                           (attr, object_type))
+
+    #         if attr == 'facts' and object_type == 'nodes':
+    #             existing_fact = self.api._model_query(
+    #                 'facts',
+    #                 'node_id=%d and key=%s' % (node['id'], rest))
+
+    #             if existing_fact:
+    #                 self.api._model_update_by_id('facts',
+    #                                              existing_fact['id'],
+    #                                              {'value': value})
+    #             else:
+    #                 self.api._model_create('facts', {'node_id': node['id'],
+    #                                                  'key': rest,
+    #                                                  'value': value})
+    #         elif attr == 'attrs' and object_type == 'nodes':
+    #             existing_attr = self.api._model_query(
+    #                 'attrs',
+    #                 'node_id=%d and key=%s' % (node['id'], rest))
+
+    #             if existing_attr:
+    #                 self.api._model_update_by_id('attrs',
+    #                                              existing_attr['id'],
+    #                                              {'value': value})
+    #             else:
+    #                 self.api._model_create('attrs', {'node_id': node['id'],
+    #                                                  'key': rest,
+    #                                                  'value': value})
+    #         return
+
+    #     raise ValueError('Cannot express assignment to id: %s' % identifier)
 
     def eval_identifier(self, node, identifier, ns=None):
         self.logger.debug('resolving identifier "%s" on:\n%s with ns %s' %
@@ -717,6 +814,14 @@ class Node:
             rhs_val = str(rhs_val)
 
         self.logger.debug('checking %s %s %s' % (lhs_val, self.op, rhs_val))
+
+        # handle arith first
+        if self.op in ['+', '-', '/', '*']:
+            if not isinstance(lhs_val, type(rhs_val)):
+                raise SyntaxError('Mismatched types for "%s"' % self.op)
+
+            result = self.arithop(self.op, lhs_val, rhs_val)
+            return result
 
         if self.op == '=':
             if lhs_val == rhs_val:
