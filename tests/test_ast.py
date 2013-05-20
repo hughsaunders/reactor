@@ -27,7 +27,7 @@ class AstTests(unittest2.TestCase):
 
     def _eval(self, node, expression, ns=None):
         ast = reactor.ast.FilterBuilder(reactor.ast.FilterTokenizer(),
-                                        input_expression = expression,
+                                        input_expression=expression,
                                         ns=ns)
         return ast.eval_node(node)
 
