@@ -184,7 +184,6 @@ class FilterTokenizer(AbstractTokenizer):
             (r"\)", self.close_paren),
             (r"'([^'\\]*(?:\\.[^'\\]*)*)'", self.qstring),
             (r'"([^"\\]*(?:\\.[^"\\]*)*)"', self.qstring),
-            (r"[a-zA-Z_]*:", self.typedef),
             (r"\<\=|\>\=", self.op),
             (r"\=|\<|\>", self.op),
             (r"[A-Za-z{][A-Za-z0-9_\-{}]*", self.identifier),
@@ -193,9 +192,6 @@ class FilterTokenizer(AbstractTokenizer):
         ])
 
     # token generators
-    def typedef(self, scanner, token):
-        return 'TYPEDEF', token[0:-1]
-
     def open_bracket(self, scanner, token):
         return 'OPENBRACKET', token
 
@@ -470,15 +466,10 @@ class FilterBuilder(AstBuilder):
         else:
             return node
 
-    # phrase -> {typedef}? andexpr EOF
+    # phrase -> andexpr EOF
     @logwrapper
     def parse_phrase(self):
         token, val = self.tokenizer.peek()
-
-        if token == 'TYPEDEF':
-            self.input_type = val
-            self.tokenizer.scan()
-            self.logger.debug('Set input type to %s' % self.input_type)
 
         node = self.parse_andexpr()
 
