@@ -113,8 +113,30 @@ class AstTests(unittest2.TestCase):
         ns = {'foo': 'bar'}
         self.assertEqual(self._eval(self.node1, 'foo', ns), 'bar')
 
-    def test_assignment(self):
-        ns = {}
-        self._eval(self.node1, 'arf := 3')
+    def test_arith(self):
+        self.assertEqual(self._eval(self.node1,
+                                    '3 + 5'), 8)
+        self.assertEqual(self._eval(self.node1,
+                                    '3 * 5'), 15)
+        self.assertEqual(self._eval(self.node1,
+                                    '8 / 2'), 4)
+        self.assertEqual(self._eval(self.node1,
+                                    '7 / 2'), 3)
+        self.assertEqual(self._eval(self.node1,
+                                    '8 - 2'), 6)
 
-        self.assertEqual(ns['arf'], 3)
+    def test_precedence(self):
+        self.assertEqual(self._eval(self.node1,
+                                    '1 + 2 * 3'), 7)
+        self.assertEqual(self._eval(self.node1,
+                                    '3 * 2 + 1'), 7)
+        self.assertTrue(self._eval(self.node1,
+                                   'true and false or true'))
+        self.assertTrue(self._eval(self.node1,
+                                   'true or false and true'))
+
+    # def test_assignment(self):
+    #     ns = {}
+    #     self._eval(self.node1, 'arf := 3')
+
+    #     self.assertEqual(ns['arf'], 3)
