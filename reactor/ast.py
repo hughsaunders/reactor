@@ -526,9 +526,11 @@ class Node:
                        'STRING', 'IDENTIFIER']:
             outstr += self.value_to_s()
         elif self.op in ['+', '-', '*', '/']:
-            outstr += '\n' + self.lhs.emit(indent+1) + self.rhs.emit(indent+1)
+            outstr += '\n%s%s' % (self.lhs.emit(indent + 1),
+                                  self.rhs.emit(indent + 1))
         elif self.op in ['AND', 'OR']:
-            outstr += '\n' + self.lhs.emit(indent+1) + self.rhs.emit(indent+1)
+            outstr += '\n%s%s' % (self.lhs.emit(indent + 1),
+                                  self.rhs.emit(indent + 1))
         else:
             raise SyntaxError('Non emittable op: %s' % (self.op,))
 
@@ -621,7 +623,6 @@ class Node:
             return self.canonicalize_identifier(node, new_identifier, ns)
 
         return identifier
-
 
     # def assign_identifier(self, node, identifier, value, ns=None):
     #     # there is lots of strange flakeyness here.
