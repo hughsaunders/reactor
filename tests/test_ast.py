@@ -112,3 +112,9 @@ class AstTests(unittest2.TestCase):
     def test_ns(self):
         ns = {'foo': 'bar'}
         self.assertEqual(self._eval(self.node1, 'foo', ns), 'bar')
+
+    def test_assignment(self):
+        ns = {}
+        self._eval(self.node1, 'arf := 3')
+
+        self.assertEqual(ns['arf'], 3)
