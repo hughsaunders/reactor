@@ -418,9 +418,7 @@ class FilterBuilder(AstBuilder):
 
         if token == 'IDENTIFIER':
             next_token, next_val = self.tokenizer.peek()
-            if next_token != 'OPENPAREN':
-                return Node(str(val), 'IDENTIFIER', None)
-            else:
+            if next_token == 'OPENPAREN':
                 self.tokenizer.scan()  # eat the paren
 
                 done = False
@@ -438,6 +436,30 @@ class FilterBuilder(AstBuilder):
 
                     if token != 'COMMA':
                         raise SyntaxError('expecting comma or close paren')
+
+            elif next_token == 'DEREF':
+                node_string = str(val)
+                while True:
+                    next_token, next_val = self.tokenizer.peek()
+                    if next_token == 'DEREF':
+                        self.tokenizer.scan()  # consume deref
+                        next_token, next_val = self.tokenizer.peek()
+                        if next_token != 'IDENTIFIER':
+                            raise SyntaxError('Expecting IDENTIFIER')
+                        continue
+                    if next_token == 'IDENTIFIER':
+                        self.tokenizer.scan()  # consume IDENTIFIER
+                        node_string = "%s.%s" % (node_string, next_val)
+                        next_token, next_val = self.tokenizer.peek()
+                        if next_token == 'DEREF':
+                            continue
+                        else:
+                            break
+
+                return Node(node_string, 'IDENTIFIER', None)
+
+            else:
+                return Node(str(val), 'IDENTIFIER', None)
 
         raise SyntaxError('expecting evaluable item in "%s"' %
                           self.input_expression)
