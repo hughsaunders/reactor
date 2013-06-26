@@ -707,11 +707,14 @@ class Node:
         if node is None or identifier is None:
             raise TypeError('invalid node or identifier in eval_identifier')
 
+        if ns is None:
+            ns = {}
+
         if identifier in ns:
             return ns[identifier]
 
         # check for string interpolation in identifier.
-        match = re.match("(.*)\{(.*?)}(.*)", identifier)
+        match = re.match("(.*)\{(.*?)\}(.*)", identifier)
         if match is not None:
             resolved_match_term = self.eval_identifier(node, match.group(2))
             new_identifier = "%s%s%s" % (match.group(1), resolved_match_term,
@@ -721,6 +724,8 @@ class Node:
 
         if identifier.find('.') == -1:
             if identifier in node:
+                if isinstance(node[identifier], basestring):
+                    return unicode(node[identifier])
                 return node[identifier]
             else:
                 # should this raise?
@@ -781,7 +786,7 @@ class Node:
                        'IDENTIFIER', 'FUNCTION', 'ARRAY', 'NONE']:
             if self.op == 'STRING':
                 # check for string interpolation in identifier.
-                retval = str(self.lhs)
+                retval = unicode(self.lhs)
                 match = re.match("(.*)\{(.*?)}(.*)", retval)
                 if match is not None:
                     resolved_match_term = self.eval_identifier(node,
